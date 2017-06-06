@@ -1,0 +1,129 @@
+---
+title: "NOAA_Storm_study"
+author: "Toby H Ferguson"
+date: "5/31/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Title Deadliest and most expensive US Storms since 1996
+
+## Synopsis
+We provide an exploratory analysis of the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm data. We want to see a time series plot of storm damage (deaths, injuries, property and crop damage) across the US. 
+
+
+
+## Data Processing
+The data is downloaded from the bzip2 compressed CSV separated file: <https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2>.
+
+The database details are located at <https://www.ncdc.noaa.gov/stormevents/details.jsp>
+
+There doesn't appear to be a definite code book for the dataset. However the data can be understood by reading the National Climatic Data Center Storm Events [FAQ](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2FNCDC%20Storm%20Events-FAQ%20Page.pdf) & [Details](https://www.ncdc.noaa.gov/stormevents/details.jsp) pages.
+
+Prior to 1996 only limited data was collected, covering Tornadoes (1950 onwards) and Thunderstorms, Hail and Wind (added in 1955). The full 48 event types were collected from 1996 onwards. Furthermore, prior to 1993, the data collection methods were non-digital, and thus less reliable.
+
+For these reasons we shall limit our study to only include data after 1996. Furthermore, we're only interested in the following columns:
+* BGN_DATE - beginning date of event
+* STATE - state in which event began
+* EVTYPE - type of event
+* FATALITIES - # of fatalities
+* INJURIES - # of injuries
+* PROPDMG - $ value of property damage
+* PROPDMGEXP - property damage multiplier
+* CROPDMG - $ value of crop damage
+* CROPDMGEXP - crop damage multiplier
+
+
+We read in the raw data thus (note that we later cache the prepared data so that we don't have to do this expensive operation again)
+```{r}
+suppressPackageStartupMessages(library(dplyr))
+bzipfile="NOAA.csv.bz2"
+if (!file.exists(bzipfile)) { 
+  download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2",
+  destfile="NOAA.csv.bz2")
+}
+raw.data <- tbl_df(read.csv("NOAA.csv.bz2", stringsAsFactors=FALSE))
+```
+
+The headings can be seen below:
+```{r}
+str(raw.data)
+```
+
+
+Let's create a proper date column, limit the data set to the years 1996 and later, and select only the columns we want. We'll also save that to a file so we don't have to read all the data in again:
+
+
+
+```{r}
+suppressPackageStartupMessages(library(lubridate))
+dated.data <- raw.data %>% 
+  mutate(DATE=mdy_hms(BGN_DATE)) %>%
+  filter(year(DATE) >= 1996) %>%
+  select(DATE, STATE, EVTYPE, FATALITIES, INJURIES, PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP)
+
+```
+
+Lets examine the `*EXP` columns and figure out what they might mean.
+
+```{r}
+unique(dated.data$PROPDMGEXP)
+```
+I assume that these are multipliers of the original `PROPDMG` value, with 
+* "" - 1
+* K - Kilo  - 10^3
+* M - Mega  - 10^6
+* B - Billion - 10^9
+
+Are there any values with a zero multiplier? Lets look:
+```{r}
+filter(dated.data, PROPDMGEXP=="0")$PROPDMG
+```
+Nope - so we can ignore that.
+
+Let's see if the `CROPDMGEXP` column is similar:
+```{r}
+unique(dated.data$CROPDMGEXP)
+```
+Similar (there are no "0" values).
+
+Let's create two helper tables that we can then join to calculate out the actual values:
+```{r}
+cropval <- data.frame(CROPDMGEXP=c("", "K","M", "B"), CROPMULT=c(1, 10^3, 10^6, 10^9), stringsAsFactors = FALSE)
+propval <- data.frame(PROPDMGEXP=c("0", "", "K","M", "B"), PROPMULT=c(0, 1, 10^3, 10^6, 10^9), stringsAsFactors = FALSE)
+```
+
+We will join these to the dated.data table, then calculate the actual value for crop and property damage, collecting these in the `CROPDMGVALUE` and `PROPDMGVALUE` columns. 
+
+```{r}
+
+value.data <- dated.data %>% 
+  full_join(cropval, by = "CROPDMGEXP") %>%
+  full_join(propval, by = "PROPDMGEXP") %>%
+  mutate(CROPDMGVALUE = CROPDMG * CROPMULT, PROPDMGVALUE = PROPDMG * PROPMULT)
+```
+
+So now the Data Processing is complete. We have a table `value.data` that, although it isn't tidy, can be used for analysis.
+
+## Results
+Lets see how injuries and fatalities have varied by year.  
+```{r}
+by_event <- group_by(value.data,EVTYPE)
+
+suppressPackageStartupMessages(library(tidyr))
+suppressPackageStartupMessages(library(ggplot2))
+hurt <- by_event %>% summarize(injuries = sum(INJURIES), fatalities=sum(FATALITIES)) %>% gather("type", "count", injuries, fatalities) %>% top_n(10, count)
+ggplot(data=hurt, mapping=aes(x=EVTYPE, y=count, fill=type)) + geom_col() +labs(title = "Most Harmful Events in USA")
+```
+
+We'll do similar for crop and property damage
+
+```{r}
+damage <- by_event %>%
+  summarize(crop=sum(CROPDMGVALUE), property=sum(PROPDMGVALUE)) %>%
+  gather("type", "value", crop, property)
+ggplot(data=damage, mapping=aes(x=YEAR, y=value, fill=type)) + geom_col()+labs(title = "Storm Related Damage in USA")+labs(y="Cost in $")
+```
+
