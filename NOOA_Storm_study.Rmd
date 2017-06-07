@@ -130,7 +130,7 @@ damage <- by_event %>%
   gather("type", "value", crop, property)%>% 
   group_by(type) %>% 
   top_n(5, value)
-ggplot(data=damage, mapping=aes(x=EVTYPE, y=value)) + geom_col()+labs(title = "Types of storm events that have the greatest economic consequences")+labs(y="Cost in $") + geom_text(aes(x=EVTYPE, y=value, label=value), hjust=-0.2) +facet_grid(type ~ ., labeller = label_both)+ylim(0,2e+11)+coord_flip()
+ggplot(data=damage, mapping=aes(x=EVTYPE, y=value)) + geom_col()+labs(title = "Types of storm events that have the greatest economic consequences", x="Event Type")+labs(y="Cost in $") + geom_text(aes(x=EVTYPE, y=value, label=value), hjust=-0.2) +facet_grid(type ~ ., labeller = label_both)+ylim(0,2e+11)+coord_flip()
 ```
 
 Overall it looks like damage is caused mainly by drought (for crops) and flooding (for property) and there's a little less overlap in types of events, with only 2 (Hurricane/Typhoon, Flood) being common amongst the top 5 kind of damage in both categories (crops and property)
