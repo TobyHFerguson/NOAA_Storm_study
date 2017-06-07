@@ -114,16 +114,23 @@ by_event <- group_by(value.data,EVTYPE)
 
 suppressPackageStartupMessages(library(tidyr))
 suppressPackageStartupMessages(library(ggplot2))
-hurt <- by_event %>% summarize(injuries = sum(INJURIES), fatalities=sum(FATALITIES)) %>% gather("type", "count", injuries, fatalities) %>% top_n(10, count)
-ggplot(data=hurt, mapping=aes(x=EVTYPE, y=count, fill=type)) + geom_col() +labs(title = "Most Harmful Events in USA")
+hurt <- by_event %>% summarize(injuries = sum(INJURIES), fatalities=sum(FATALITIES)) %>% gather("type", "count", injuries, fatalities) %>% 
+  group_by(type) %>% 
+  top_n(5, count)
+ggplot(data=hurt, mapping=aes(x=EVTYPE, y=count)) + geom_col() +labs(title = "Most Harmful Events in USA", x="Event Type") + geom_text(aes(x=EVTYPE, y=count, label=count), hjust=-0.3) + ylim(0, 25000)+facet_grid(type ~ .)+coord_flip()
 ```
 
-We'll do similar for crop and property damage
+What we can see is that while there is considerable overlap in the event types that cause the most fatalities and injuries (4 of the top 5 for each are common), the event type that is the most dangerous is different for each type of harm. (Tornados for injuries, excessive heat for fatalities)
+
+We'll do similar for crop and property damage ...
 
 ```{r}
 damage <- by_event %>%
   summarize(crop=sum(CROPDMGVALUE), property=sum(PROPDMGVALUE)) %>%
-  gather("type", "value", crop, property)
-ggplot(data=damage, mapping=aes(x=YEAR, y=value, fill=type)) + geom_col()+labs(title = "Storm Related Damage in USA")+labs(y="Cost in $")
+  gather("type", "value", crop, property)%>% 
+  group_by(type) %>% 
+  top_n(5, value)
+ggplot(data=damage, mapping=aes(x=EVTYPE, y=value)) + geom_col()+labs(title = "Storm Related Damage in USA")+labs(y="Cost in $") + geom_text(aes(x=EVTYPE, y=value, label=value), hjust=-0.2) +facet_grid(type ~ ., labeller = label_both)+ylim(0,2e+11)+coord_flip()
 ```
 
+Overall it looks like damage is caused mainly by drought (for crops) and flooding (for property) and there's a little less overlap in types of events, with only 2 (Hurricane/Typhoon, Flood) being common amongst the top 5 kind of damage in both categories (crops and property)
